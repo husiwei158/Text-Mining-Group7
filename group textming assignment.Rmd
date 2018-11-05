@@ -109,7 +109,7 @@ bing_word_counts %>%
 
 ```
 These two chart provide us about top 10 words which contribute to sentiment. Because it's a short article. So many words only appeared for one time, this made top10 rank useless. But we still can know the biggest word in this article. In positive chart, 'popular' was used by 4 times. I can understand about this because it's a article to recommand book for data scientists. in the negative chart,'pessimistic','critism','critical' all appeared two times. 
-```{r,echo=FALSE,warning=FALSE}
+```{r,echo=FALSE,warning=FALSE,fig.width=6,fig.height=6}
 #do a wordcloud
 library(wordcloud)
 library(wordcloud2)
@@ -212,7 +212,7 @@ fb_bing_word_counts %>%
 
 ```
 From two chart, neurotic is the most negative word in article. Then word "unethical" and "manipulation" both appeared 3 times. These word helped author to explain about how facebook use their impact to affect people during the election. The most word in postive part actually is trump. In the article, it means the president. So i filter this word which is error in this analysis. So we can see the positive words here. From two word frequency charts, the negative words display stronger emotion than positive words do. 
-```{r,echo=FALSE,warning=FALSE}
+```{r,echo=FALSE,warning=FALSE,fig.width=6,fig.height=6}
 library(reshape2)
 txt_fb_sep %>%
   anti_join(stop_words) %>%
