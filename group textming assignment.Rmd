@@ -1,6 +1,6 @@
 ---
 title: "Textming"
-author: "Siwei Hu"
+author: "Siwei Hu, Yifeng Luo, Hao Qin, David Anderson"
 date: "November 4, 2018"
 output: pdf_document
 ---
