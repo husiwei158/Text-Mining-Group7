@@ -1,0 +1,84 @@
+---
+title: "615_mapping"
+name: Yifeng Luo, Siwei Hu, Hao Qin, David Andreson
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+name: Yifeng Luo, Siwei Hu, Hao Qin, David Andreson
+
+```{r setup, include=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=FALSE,warning=FALSE}
+library(tidyverse)
+library(stringr)
+library(leaflet)
+library(sp)
+library(purrr)
+library(htmltools)
+library(rgdal)
+library(htmltools)
+library(lubridate)
+restaurant<-read.csv("https://data.boston.gov/dataset/03693648-2c62-4a2c-a4ec-48de2ee14e18/resource/4582bec6-2b4f-4f9e-bc55-cbaa73117f4c/download/food_establishment_inspections.csv")
+
+```
+
+```{r,echo=FALSE,warning=FALSE}
+#names(restaurant)
+restaurant %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,Violation,ViolLevel,ViolDesc,VIOLDTTM,ViolStatus,StatusDate,Comments,CITY,Location)->restaurant_reduce
+```
+Question 1:How many retail shops in Allston have legal licence until now?
+```{r,echo=FALSE,warning=FALSE}
+legal<-restaurant_reduce %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,CITY,Location) %>% filter(CITY=='Allston' | CITY=='ALLSTON') %>% filter(LICSTATUS=='Active') %>% filter(DESCRIPT=='Retail Food') %>% distinct()
+legal<-as.data.frame(apply(legal, 2, function(x) gsub("^$|^ $", NA, x)))
+legal<-legal %>% filter(!is.na(Location))
+legal<-legal %>% mutate(Long=as.data.frame(str_split(legal$Location, '[(,)]',simplify = TRUE))$V3,Lat=as.data.frame(str_split(legal$Location, '[(,)]',simplify = TRUE))$V2)
+```
+
+```{r,echo=FALSE,warning=FALSE}
+legal$Long<-as.numeric(as.character(legal$Long))
+legal$Lat<-as.numeric(as.character(legal$Lat))
+leaflet(legal) %>% addTiles() %>%
+  addMarkers(~Long,~Lat, label = ~htmlEscape(businessName)) #addmarker 点击出位置信息
+```
+There are 36 retail shops in Allston in total, 29 of which has active license until now, however, only 21 shops have complete location data, they are showed in this map.
+
+
+Question 2:How many restaurants nearby Boston University where are three main areas-Fenway, Back Bay and Allston-occurred violation events during the last three months (08/01/2018-10/31/2018)? How many violations took place by these restaurants? 
+```{r,echo=FALSE,warning=FALSE}
+violation<-restaurant_reduce %>% select(Property_ID,businessName,VIOLDTTM,ViolStatus,StatusDate,CITY,Location) 
+violation<-violation %>% mutate(date=as.Date(sapply(str_split(violation$VIOLDTTM,' '), '[',1))) %>% filter(date>=ymd('2018-08-01') & date<=ymd('2018-10-31')) %>% filter(ViolStatus=='Pass') %>% distinct() %>% filter(CITY=='Allston' | CITY=='ALLSTON' | CITY=='Back Bay' | CITY=='Fenway')
+violation<-as.data.frame(apply(violation, 2, function(x) gsub("^$|^ $", NA, x)),stringsAsFactors = FALSE)
+violation %>% filter(!is.na(Location)) %>% select(-c(StatusDate,VIOLDTTM,ViolStatus,CITY)) %>% distinct()->violation
+violation %>% mutate(n=1)%>% group_by(Property_ID)->violation1
+violation2<-summarise(violation1,count=sum(n))
+violation3<-left_join(violation,violation2,by = "Property_ID")
+violation3<-violation3 %>% mutate(Long=as.data.frame(str_split(Location,'[(,)]',simplify = TRUE))$V3,Lat=as.data.frame(str_split(Location,'[(,)]',simplify = TRUE))$V2) %>% select(businessName,count,Long,Lat)
+```
+
+```{r,echo=FALSE,warning=FALSE}
+getColor <- function(violation3) {
+  sapply(violation3$count, function(count) {
+    if(count <= 1) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(violation3)
+)
+violation3$Lat<-as.numeric(as.character(violation3$Lat))
+violation3$Long<-as.numeric(as.character(violation3$Long))
+
+leaflet(violation3) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons, label=~businessName)
+
+```
+There are 65 restaurant nearby BU occurred violation in the last three month, they are concentrated around Allston. Ectracting the restaurants which have not complete location information in our dataset, here are 45 restaurants shows in the map. The orange points represent the the times of violation less than 2, the red one represents the violation more than 2 times in the last three months. Hope this map can give BU students and staffs some suggestions for choosing a better restaurant.
