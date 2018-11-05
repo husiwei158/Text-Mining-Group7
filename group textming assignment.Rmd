@@ -87,7 +87,7 @@ ggplot(aes(linenumber, sentiment, fill = method),data = txt.sentiment) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~method, ncol = 1, scales = "free_y")
 ```
-
+Sentiment analysis for these paragrahs: From AFINN and bing, they have really similar sentiment fluctuate(posive,negative and neutral). since nrc recognize the words as "fear","happy","postive" and so on, so it will not easily to decide a word is positive or negative. However, for this data science article, we do not need too much different emotion word to justify it. Positive or negative is better. So i think bing and Afinn can simpily display the sentiment of the article. Basicly, it displayed a positive emotion to the audience.   
 
 ```{r,echo=FALSE,warning=FALSE}
 # do inner_join with bing, and count how many word has postive and negetive
@@ -108,22 +108,26 @@ bing_word_counts %>%
   coord_flip()
 
 ```
-
+These two chart provide us about top 10 words which contribute to sentiment. Because it's a short article. So many words only appeared for one time, this made top10 rank useless. But we still can know the biggest word in this article. In positive chart, 'popular' was used by 4 times. I can understand about this because it's a article to recommand book for data scientists. in the negative chart,'pessimistic','critism','critical' all appeared two times. 
 ```{r,echo=FALSE,warning=FALSE}
 #do a wordcloud
 library(wordcloud)
+library(wordcloud2)
 library(reshape2)
 txt.sep %>%
   anti_join(stop_words) %>%
   count(word,sort = TRUE) %>% 
  with(wordcloud(word, n, max.words = 100))
 #do classier wordcloud(positive and negative)
+
+
 txt.sep.bing %>% 
   count(word,sentiment,sort = TRUE) %>% 
    acast(word~sentiment,fill=0) %>% 
-  comparison.cloud(color = c("#F8766D","#00BFC4"),max.words = 60)
+  comparison.cloud(color = c("#F8766D","#00BFC4"),max.words = 60,title.bg.colors = "Grey")
+#png("", width=15,height=10, units='in', res=300)
 ```
-
+i draw two wordcloud to help my audience to understand what is the high frequence words and which side they belong. 
 
 ```{r,echo=FALSE,warning=FALSE}
 ## import the text document from URL
@@ -146,7 +150,8 @@ txt_fb_sep <- txt_fb%>%
   unnest_tokens(word,text) %>% 
   anti_join(stop_words) %>% 
 #filter useless number
-    filter(str_detect(word,"[:alpha:]"))
+    filter(str_detect(word,"[:alpha:]")) %>% 
+    filter(word != "trump")
 
 txt_fb_n <- txt_fb_sep %>% count(word, sort = TRUE) %>% 
   mutate(name = "neurotic machine")
@@ -175,7 +180,7 @@ txt_fb_bing <- txt_fb_sep%>% inner_join(get_sentiments("bing")) %>%
 # combine nrc and bing, then analyze the sentiment in different linenumber
 txt_bing_nrc <- bind_rows(txt_fb_nrc,txt_fb_bing) %>% 
   count(method,index = linenumber%/%5, sentiment) %>%
-  spread(sentiment, n, fill = 0) %>%
+  spread(sentiment, n, fill = 0)%>%
   mutate(sentiment = positive - negative) %>% 
   select(method,index,sentiment)
 #combine all three different ways
@@ -185,7 +190,7 @@ ggplot(aes(index, sentiment, fill = method),data = txt_sentiment) +
   geom_col(show_legend = FALSE) +
   facet_wrap(~method, ncol = 1, scales = "free_y")
 ```
-
+In the article"RECONSTRUCTING CAMBRIDGE ANALYTICA'S "PSYCHOLOGICAL WARFARE TOOL",i set each two paragraphs give us a value of sentiment.  The afinn method gave us the clearest influate of emotion, there is no blank(which means the value equal to 0 which is neutral) for each two paragraphs. Bing method show several natural paragraph and two extrem value positive 6 and negative -7 The analysis of AFINN and Bing is similar except the paragraph 15 and 16. However,the mothod nrc give a very positive tendency of sentiment for this article. From all three method, the first 10 paragraphs, author display positive attitude,however, at the end of article, he showed the audience a negative attitude.  
 ```{r,echo=FALSE,warning=FALSE}
 # do inner_join with bing, and count how many word has postive and negetive
 fb_bing_word_counts <- txt_fb_sep %>%
@@ -206,7 +211,7 @@ fb_bing_word_counts %>%
 
 
 ```
-
+From two chart, neurotic is the most negative word in article. Then word "unethical" and "manipulation" both appeared 3 times. These word helped author to explain about how facebook use their impact to affect people during the election. The most word in postive part actually is trump. In the article, it means the president. So i filter this word which is error in this analysis. So we can see the positive words here. From two word frequency charts, the negative words display stronger emotion than positive words do. 
 ```{r,echo=FALSE,warning=FALSE}
 library(reshape2)
 txt_fb_sep %>%
@@ -219,7 +224,7 @@ fb_bing_word_counts%>%
   comparison.cloud(colors = c("#F8766D","#00BFC4"))
 
 ```
-
+The wordcloud also help to support what i said in the above word frequency chars. The negative word display higher frequency and stronger emotion. 
 ```{r,echo=FALSE,warning=FALSE}
 #combine two article count data into one df
 #calculate the ti_idf to understand the importance of word to this article
@@ -239,3 +244,7 @@ tf.idf <- tf.idf %>%
   coord_flip()
 
 ```
+
+tf_idf charts showed us which words are more important in one article. 
+In the article "RECONSTRUCTING CAMBRIDGE ANALYTICA'S "PSYCHOLOGICAL WARFARE TOOL", company name and words like "information","ad" are more important. These are core vocabulary for this article.They can help people to understand what happen easier.
+In the article "DATA SCIENCE IS NOT JUST ABOUT DATA SCIENCE", book and books become the core words. I agree with this because the subtitle of it is "7 POPULAR SCIENCE BOOKS THAT YOU HAVE TO READ". 
