@@ -5,12 +5,12 @@ output:
   pdf_document: 
     latex_engine: xelatex
 ---
-
-```{r setup, include=FALSE}
+name: Yifeng Luo, Siwei Hu, Hao Qin, David Andreson
+```{r setup, include=FALSE,warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,warning=FALSE}
 library(tidyverse)
 library(stringr)
 library(leaflet)
@@ -24,19 +24,19 @@ restaurant<-read.csv("https://data.boston.gov/dataset/03693648-2c62-4a2c-a4ec-48
 
 ```
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,warning=FALSE}
 #names(restaurant)
 restaurant %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,Violation,ViolLevel,ViolDesc,VIOLDTTM,ViolStatus,StatusDate,Comments,CITY,Location)->restaurant_reduce
 ```
-#Question1:How many retail shops in Allston have legal licence until now?
-```{r,echo=FALSE}
+#Question 1:How many retail shops in Allston have legal licence until now?
+```{r,echo=FALSE,warning=FALSE}
 legal<-restaurant_reduce %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,CITY,Location) %>% filter(CITY=='Allston' | CITY=='ALLSTON') %>% filter(LICSTATUS=='Active') %>% filter(DESCRIPT=='Retail Food') %>% distinct()
 legal<-as.data.frame(apply(legal, 2, function(x) gsub("^$|^ $", NA, x)))
 legal<-legal %>% filter(!is.na(Location))
 legal<-legal %>% mutate(Long=as.data.frame(str_split(legal$Location, '[(,)]',simplify = TRUE))$V3,Lat=as.data.frame(str_split(legal$Location, '[(,)]',simplify = TRUE))$V2)
 ```
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,warning=FALSE}
 legal$Long<-as.numeric(as.character(legal$Long))
 legal$Lat<-as.numeric(as.character(legal$Lat))
 leaflet(legal) %>% addTiles() %>%
@@ -46,7 +46,7 @@ leaflet(legal) %>% addTiles() %>%
 
 
 #Question 2:How many restaurants nearby Boston University where are three main areas-Fenway, Back Bay and Allston-occurred violation events during the last three months (08/01/2018-10/31/2018)? How many violations took place by these restaurants? 
-```{r,echo=FALSE}
+```{r,echo=FALSE,warning=FALSE}
 violation<-restaurant_reduce %>% select(Property_ID,businessName,VIOLDTTM,ViolStatus,StatusDate,CITY,Location) 
 violation<-violation %>% mutate(date=as.Date(sapply(str_split(violation$VIOLDTTM,' '), '[',1))) %>% filter(date>=ymd('2018-08-01') & date<=ymd('2018-10-31')) %>% filter(ViolStatus=='Pass') %>% distinct() %>% filter(CITY=='Allston' | CITY=='ALLSTON' | CITY=='Back Bay' | CITY=='Fenway')
 violation<-as.data.frame(apply(violation, 2, function(x) gsub("^$|^ $", NA, x)),stringsAsFactors = FALSE)
@@ -57,7 +57,7 @@ violation3<-left_join(violation,violation2,by = "Property_ID")
 violation3<-violation3 %>% mutate(Long=as.data.frame(str_split(Location,'[(,)]',simplify = TRUE))$V3,Lat=as.data.frame(str_split(Location,'[(,)]',simplify = TRUE))$V2) %>% select(businessName,count,Long,Lat)
 ```
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,warning=FALSE}
 getColor <- function(violation3) {
   sapply(violation3$count, function(count) {
     if(count <= 1) {
