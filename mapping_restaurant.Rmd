@@ -1,9 +1,10 @@
 ---
 title: "615_mapping"
-name: Yifeng Luo, Siwei Hu, Hao Qin, David Andreson
-output: 
-  pdf_document: 
+output:
+  pdf_document:
     latex_engine: xelatex
+  html_document:
+    df_print: paged
 ---
 name: Yifeng Luo, Siwei Hu, Hao Qin, David Andreson
 
@@ -13,22 +14,23 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r,echo=FALSE,warning=FALSE}
 library(tidyverse)
-library(stringr)
+library(magrittr)
 library(leaflet)
 library(sp)
-library(purrr)
 library(htmltools)
 library(rgdal)
 library(htmltools)
 library(lubridate)
-restaurant<-read.csv("https://data.boston.gov/dataset/03693648-2c62-4a2c-a4ec-48de2ee14e18/resource/4582bec6-2b4f-4f9e-bc55-cbaa73117f4c/download/food_establishment_inspections.csv")
-
+restaurant<-read_csv("https://data.boston.gov/dataset/03693648-2c62-4a2c-a4ec-48de2ee14e18/resource/4582bec6-2b4f-4f9e-bc55-cbaa73117f4c/download/food_establishment_inspections.csv")
 ```
 
 ```{r,echo=FALSE,warning=FALSE}
 #names(restaurant)
-restaurant %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,Violation,ViolLevel,ViolDesc,VIOLDTTM,ViolStatus,StatusDate,Comments,CITY,Location)->restaurant_reduce
+restaurant %>% 
+  select(Property_ID,businessName,LICSTATUS,DESCRIPT,Violation,ViolLevel,ViolDesc,VIOLDTTM,ViolStatus,StatusDate,Comments,CITY,Location)->restaurant_reduce
 ```
+
+
 Question 1:How many retail shops in Allston have legal licence until now?
 ```{r,echo=FALSE,warning=FALSE}
 legal<-restaurant_reduce %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,CITY,Location) %>% filter(CITY=='Allston' | CITY=='ALLSTON') %>% filter(LICSTATUS=='Active') %>% filter(DESCRIPT=='Retail Food') %>% distinct()
@@ -82,3 +84,198 @@ leaflet(violation3) %>% addTiles() %>%
 
 ```
 There are 65 restaurant nearby BU occurred violation in the last three month, they are concentrated around Allston. Ectracting the restaurants which have not complete location information in our dataset, here are 45 restaurants shows in the map. The orange points represent the the times of violation less than 2, the red one represents the violation more than 2 times in the last three months. Hope this map can give BU students and staffs some suggestions for choosing a better restaurant.
+
+
+Let focus on an bigger picture, we analysed all of the restaurant around the Boston which has the active licence until now. We considered the two factors: the number of violation by each restaurant ID and their violation level from 01/01/2017 to 01/01/2018 and counted their valid violation (violation status is pass) and calculated their average violation level to valuate these restaurants. We divided these restaurant into 3 groups by the type of entities: eating & drinking restaurant, eating & drinking /take out food and retail shops/walk-on restaurant in order to aviod a mussy map.
+
+```{r,echo=FALSE}
+type<-restaurant %>% select(Property_ID,businessName,LICSTATUS,DESCRIPT,Address,CITY,STATE,ZIP,Location,VIOLDTTM,ViolLevel,ViolStatus) %>% filter(LICSTATUS=='Active') %>%filter(!is.na(Location)) %>% distinct()#4088-->2668
+type%<>% mutate(date=as.Date(sapply(str_split(VIOLDTTM,' '), '[',1))) %>% filter(date>=ymd('2017-01-01') & date<ymd('2018-01-01')) %>% select(-VIOLDTTM) %>% distinct()
+type$ViolLevel<-ifelse(type$ViolLevel=='*',1,ifelse(type$ViolLevel=='**',2,3))
+type %<>% mutate(level=as.numeric(type$ViolLevel))
+type$CITY <- gsub("/", "", type$CITY, fixed = TRUE)
+type$Location <- gsub("(", "", type$Location, fixed = TRUE)
+type$Location <- gsub(")", "", type$Location, fixed = TRUE)
+type %<>% mutate(Long=as.data.frame(str_split(type$Location,",",simplify = TRUE),stringsAsFactors = FALSE)$V2,Lat=as.data.frame(str_split(type$Location,",",simplify = TRUE),stringsAsFactors = FALSE)$V1)
+type$Long<-as.numeric(type$Long)
+type$Lat<-as.numeric(type$Lat)
+```
+
+
+```{r,echo=FALSE}
+#pass
+pass_type <- type %>% filter(ViolStatus=='Pass') %>% group_by(Property_ID) %>% mutate(avg_level=mean(level),n=1) %>% mutate(count=sum(n)) %>% select(-c(ViolStatus,ViolLevel,date,level,n,Location)) %>% distinct()
+#fail to pass the report of violation
+fail_type<-type %>% filter(ViolStatus!='Pass') %>% mutate(avg_level=0,count=0) %>% select(-c(ViolStatus,ViolLevel,date,level,Location)) %>% distinct()
+#compelet dataset
+#pass_id<-data.frame(unique(pass_type$Property_ID))
+#fail_id<-data.frame(unique(fail_type$Property_ID))
+#names(pass_id)[1]<-'Property_ID'
+#names(fail_id)[1]<-'Property_ID'
+intersect_id<-data.frame(intersect(unique(pass_type$Property_ID),unique(fail_type$Property_ID))) #should be deleted 
+names(intersect_id)[1]<-'Property_ID' 
+clean_type<-anti_join(fail_type,intersect_id,by="Property_ID")
+complete_type<-bind_rows(pass_type,clean_type)
+complete_type$avg_level_star<-ifelse(complete_type$avg_level<=1,'*',ifelse(complete_type$avg_level<=2 &complete_type$avg_level>1,'**',"***"))
+complete_type %<>% mutate(information=str_c(avg_level_star,businessName,ZIP,CITY,sep = ' '))
+food_type<-complete_type %>% filter(DESCRIPT=='Eating & Drinking') %>% distinct() 
+drink_type<-complete_type %>% filter(DESCRIPT=='Eating & Drinking w/ Take Out') %>% distinct()
+retail_walkon_type <-complete_type%>% filter(DESCRIPT=='Retail Food' |DESCRIPT=='Mobile Food Walk On') %>%  distinct()
+```
+
+```{r,echo=FALSE}
+#mapping food type restaurant
+#summary(food_type$count)
+getColor <- function(food_type) {
+  sapply(food_type$count, function(count) {
+    if(count == 0) {
+      "green"
+    } else if(count <= 2.5 & count>0) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(food_type)
+)
+
+leaflet(food_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)
+
+leaflet(food_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)
+label = ~paste0(food_type, ": ", formatC(CENSUSAREA, big.mark = ","))
+```
+```{r,echo=FALSE}
+#mapping for the eating & drink /take out restaurant 
+#summary(drink_type$count)
+getColor <- function(food_type) {
+  sapply(food_type$count, function(count) {
+    if(count == 0) {
+      "green"
+    } else if(count <= 2 & count>0) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(drink_type)
+)
+
+leaflet(drink_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)
+```
+```{r,echo=FALSE}
+#mapping for the retail shops and walk-on restaurants 
+#summary(retail_walkon_type$count)
+getColor <- function(food_type) {
+  sapply(food_type$count, function(count) {
+    if(count == 0) {
+      "green"
+    } else if(count <= 1 & count>0) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(retail_walkon_type)
+)
+
+leaflet(retail_walkon_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)
+````
+
+The three maps show the different type of restaurant-eating & drinking restaurant, eating & drinking /take out food and retail shops/walk-on restaurant, respectively. The different colors mean the levels of danger, we assumed the bigger number of violation indicate the higher risk of hygien. The green one means this restaurant never violate the health rule in the past year-health, the orange one means the number of violation is lower than median-relative health, and the red one means the number of violation is more than median-danger. 
+
+
+
+Then we continue to analyse the three areas-Fenway, Allston and Back bay-near the BU. 
+```{r,echo=FALSE}
+# if we just analysis the areas near the Boston University, we only select the areas: Fenway, Allston and Back bay.
+bu_complete_type<-complete_type %>%  filter(CITY=='Fenway'|CITY=='Allston'|CITY=='Back Bay')
+bu_food_takeout_type<-bu_complete_type %>% filter(DESCRIPT=='Eating & Drinking'|DESCRIPT=='Eating & Drinking w/ Take Out') %>% distinct() 
+#bu_drink_type<-bu_complete_type %>% filter(DESCRIPT=='Eating & Drinking w/ Take Out') %>% distinct()
+bu_retail_walkon_type <-bu_complete_type%>% filter(DESCRIPT=='Retail Food' |DESCRIPT=='Mobile Food Walk On') %>%  distinct()
+```
+
+```{r,echo=FALSE}
+#mapping for the drinking and eating restaurant nearby BU
+#summary(bu_food_takeout_type$count)
+getColor <- function(bu_food_takeout_type) {
+  sapply(bu_food_takeout_type$count, function(count) {
+    if(count == 0) {
+      "green"
+    } else if(count <= 2 & count>0) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(bu_food_takeout_type)
+)
+
+leaflet(bu_food_takeout_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)
+```
+
+```{r,echo=FALSE}
+#mapping for the retail shops and walk-on restaurants
+#summary(bu_retail_walkon_type$count)
+getColor <- function(bu_retail_walkon_type) {
+  sapply(bu_retail_walkon_type$count, function(count) {
+    if(count == 0) {
+      "green"
+    } else if(count <= 2.5 & count>0) {
+      "orange"
+    } else {
+      "red"
+    } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(bu_retail_walkon_type)
+)
+
+leaflet(bu_retail_walkon_type) %>% addTiles() %>%
+  addAwesomeMarkers(~Long, ~Lat, icon=icons,label=~information)%>%
+  addCircles(lng = ~Long, lat = ~Lat, weight = 1,
+             radius = ~count*20, popup = ~information
+  )
+```
+Just like mentioned before, these three maps shows the variation of risk level of the restaurant nearby BU in different type. Click the location sign, it will give you the basic information about this restaurant: the average violation level in the last year, district, restaurant name and its ZIP code. The radius of circle shows the count of violation, a bigger radius means a bigger count.
+
+
+```{r,echo=FALSE}
+#calculate the average violation count by each city and use radius of circle to indicate it.
+circle<-complete_type %>%  group_by(CITY) %>% mutate(avg_count=mean(count)) %>% select(CITY,Long,Lat,avg_count) %>% distinct()
+
+leaflet(circle) %>% addTiles()%>%
+  addCircles(lng = ~Long, lat = ~Lat, weight = 1,
+             radius = ~avg_count*30)
+```
+This map shows the distribution of restaurant around the Boston. 
+
+In the next step we would like to rank and grade these restaurant according to their past violation record and other information. And we are also designing and creating the shinyapp for interactive goal.
